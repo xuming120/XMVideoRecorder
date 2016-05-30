@@ -80,6 +80,8 @@ static NSString * const XMVideoRecorderTorchAvailabilityObserverContext = @"XMVi
     
     CIContext *_ciContext;
     
+    BOOL isInbackground;
+    
     // flags
     struct {
         unsigned int previewRunning:1;
@@ -1704,7 +1706,9 @@ typedef void (^XMVideoRecorderBlock)();
                 }
                 
                 if ( currentPreviewPixelBuffer ) {
-                    [_preview displayPixelBuffer:currentPreviewPixelBuffer];
+                    if (!isInbackground) {
+                        [_preview displayPixelBuffer:currentPreviewPixelBuffer];
+                    }
                     CFRelease( currentPreviewPixelBuffer );
                 }
             }
@@ -1858,6 +1862,10 @@ typedef void (^XMVideoRecorderBlock)();
 - (void)_applicationWillEnterForeground:(NSNotification *)notification
 {
     DLog(@"applicationWillEnterForeground");
+    [self _enqueueBlockOnCaptureVideoQueue:^{
+        isInbackground = NO;
+    }];
+    
     [self _enqueueBlockOnCaptureSessionQueue:^{
         if (!_flags.previewRunning)
             return;
@@ -1871,6 +1879,14 @@ typedef void (^XMVideoRecorderBlock)();
 - (void)_applicationDidEnterBackground:(NSNotification *)notification
 {
     DLog(@"applicationDidEnterBackground");
+    [self _enqueueBlockOnCaptureVideoQueue:^{
+        isInbackground = YES;
+    }];
+    
+    [self _enqueueBlockOnMainQueue:^{
+        [_preview reset];
+    }];
+    
     if (_flags.recording)
         [self pauseVideoCapture];
     
